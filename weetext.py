@@ -159,7 +159,7 @@ def buffer_close_cb(data, buf):
 
 # register plugin
 if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, SCRIPT_DESC, "", "UTF-8"):
-    buffer = weechat.buffer_new("gv", "gvOut", "", "buffer_close_cb", "")
+    buffer = weechat.buffer_new("weeText", "gvOut", "", "buffer_close_cb", "")
     for option, default_value in script_options.iteritems():
         if not weechat.config_is_set_plugin(option):
             weechat.config_set_plugin(option, default_value)
