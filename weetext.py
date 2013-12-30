@@ -146,7 +146,7 @@ def textOut(data, buf, input_data):
     return weechat.WEECHAT_RC_OK
 
 def gvOut(data, buf, input_data):
-    if input_data[:4] == 'text' and buf == weechat.buffer_search('python', 'gv'):
+    if input_data[:4] == 'text' and buf == weechat.buffer_search('python', 'weeText'):
         buffer = weechat.buffer_new("+1"+input_data[5:], "textOut", "", "buffer_close_cb", "")
     return weechat.WEECHAT_RC_OK
 
