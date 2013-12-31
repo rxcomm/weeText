@@ -1,6 +1,6 @@
 # ===============================================================
 SCRIPT_NAME    = "weetext"
-SCRIPT_AUTHOR  = "David R. Andersen <k0rx@RXcomm.net>"
+SCRIPT_AUTHOR  = "David R. Andersen <k0rx@RXcomm.net>, Tycho Andersen <tycho@tycho.ws>"
 SCRIPT_VERSION = "0.0.2"
 SCRIPT_LICENSE = "GPL3"
 SCRIPT_DESC    = "SMS Text Messaging plugin for Weechat using Google Voice"
@@ -32,7 +32,9 @@ import sys
 import os
 import re
 import subprocess
+import socket
 import threading
+import marshall
 from googlevoice import Voice
 from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
@@ -104,10 +106,18 @@ class SMS:
             convos.append(Conversation(conversation['id'], phone, smses))
         return reversed(convos)
 
-def textIn(*args):
+def renderConversations(unused, fd):
+    try:
+        sock = socket.fromfd(fd, socket.AF_UNIX, socket.SOCK_STREAM)
+        data = sock.read()
+        sock.close()
+    except OSError:
+        # TODO: some error reporting?
+        return
+
+    conversations = marshall.loads(data)
+
     global conversation_map
-    sms = SMS()
-    conversations = sms.getsms()
     for conversation in conversations:
         if not conversation.conv_id in conversation_map:
             conversation_map[conversation.conv_id] = conversation
@@ -130,6 +140,18 @@ def textIn(*args):
                 if not buf:
                     buf = weechat.buffer_new('Me', "textOut", "", "buffer_close_cb", "")
             weechat.prnt(buf, msg['from'] + ' ' + msg['text'])
+    return weechat.WEECHAT_RC_OK
+
+def poll_worker(out):
+    sms = SMS()
+    conversations = sms.getsms()
+    out.write(marshall.dumps(conversations))
+    out.close()
+
+def trigger_poll(*args):
+    (read, write) = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    threading.Thread(target=poll_worker, args=(write,)).start()
+    weechat.hook_fd(read.fileno(), 1, 0, 0, "renderConversations", "")
     return weechat.WEECHAT_RC_OK
 
 def textOut(data, buf, input_data):
@@ -176,4 +198,4 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
     weechat.prnt('', 'Login successful')
 
     # register the hooks
-    weechat.hook_timer(int(weechat.config_get_plugin("poll_interval")) * 60 * 1000, 0, 0, "textIn", "")
+    weechat.hook_timer(int(weechat.config_get_plugin("trigger_poll")) * 60 * 1000, 0, 0, "trigger_poll", "")
