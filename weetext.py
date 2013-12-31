@@ -106,7 +106,7 @@ class SMS:
             convos.append(Conversation(conversation['id'], phone, smses))
         return reversed(convos)
 
-def renderConversations(unused, fd):
+def renderConversations(fd, unused):
     try:
         sock = socket.fromfd(fd, socket.AF_UNIX, socket.SOCK_STREAM)
         data = sock.read()
