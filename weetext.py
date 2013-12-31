@@ -34,7 +34,7 @@ import re
 import subprocess
 import socket
 import threading
-import marshall
+import marshal
 from googlevoice import Voice
 from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
@@ -115,7 +115,7 @@ def renderConversations(unused, fd):
         # TODO: some error reporting?
         return
 
-    conversations = marshall.loads(data)
+    conversations = marshal.loads(data)
 
     global conversation_map
     for conversation in conversations:
@@ -145,7 +145,7 @@ def renderConversations(unused, fd):
 def poll_worker(out):
     sms = SMS()
     conversations = sms.getsms()
-    out.write(marshall.dumps(conversations))
+    out.write(marshal.dumps(conversations))
     out.close()
 
 def trigger_poll(*args):
@@ -198,4 +198,4 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
     weechat.prnt('', 'Login successful')
 
     # register the hooks
-    weechat.hook_timer(int(weechat.config_get_plugin("trigger_poll")) * 60 * 1000, 0, 0, "trigger_poll", "")
+    weechat.hook_timer(int(weechat.config_get_plugin("poll_interval")) * 60 * 1000, 0, 0, "trigger_poll", "")
