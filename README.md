@@ -3,7 +3,7 @@ weeText
 
 Text messaging script for Weechat using Google Voice
 
-=== Usage:
+### Usage:
 
 1) Edit the script or ```~/.weechat/plugins.conf``` and input
 your credentials.
@@ -31,7 +31,7 @@ to additional phone numbers by typing the command:
 
 This will open a texting window to phone number 0123456789.
 
-=== Todos:
+### Todos:
 
 1. threaded ```recText()``` and ```login()```
 
