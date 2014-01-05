@@ -31,10 +31,9 @@ import weechat
 import sys
 import os
 import re
-import subprocess
 import socket
 import threading
-import marshal
+import cPickle
 from googlevoice import Voice
 from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
@@ -47,6 +46,7 @@ script_options = {
 
 conversation_map = {}
 number_map = {}
+(parent, child) = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
 
 class Conversation(object):
     def __init__(self, conv_id, number, messages):
@@ -104,18 +104,16 @@ class SMS:
                     msgitem['phone'] = phone
                     smses.append(msgitem)
             convos.append(Conversation(conversation['id'], phone, smses))
-        return reversed(convos)
+        return convos
 
-def renderConversations(fd, unused):
+def renderConversations(unused, fd):
     try:
-        sock = socket.fromfd(fd, socket.AF_UNIX, socket.SOCK_STREAM)
-        data = sock.read()
-        sock.close()
+        data = parent.recv(4096)
     except OSError:
         # TODO: some error reporting?
         return
 
-    conversations = marshal.loads(data)
+    conversations = reversed(cPickle.loads(data))
 
     global conversation_map
     for conversation in conversations:
@@ -142,16 +140,14 @@ def renderConversations(fd, unused):
             weechat.prnt(buf, msg['from'] + ' ' + msg['text'])
     return weechat.WEECHAT_RC_OK
 
-def poll_worker(out):
-    sms = SMS()
+def poll_worker(sms):
     conversations = sms.getsms()
-    out.write(marshal.dumps(conversations))
-    out.close()
+    child.write(cPickle.dumps(conversations))
 
 def trigger_poll(*args):
-    (read, write) = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
-    threading.Thread(target=poll_worker, args=(write,)).start()
-    weechat.hook_fd(read.fileno(), 1, 0, 0, "renderConversations", "")
+    sms = SMS()
+    thread = threading.Thread(target=poll_worker, args=(sms,)).start()
+    weechat.prnt('', str(threading.enumerate()))
     return weechat.WEECHAT_RC_OK
 
 def textOut(data, buf, input_data):
@@ -199,3 +195,4 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
 
     # register the hooks
     weechat.hook_timer(int(weechat.config_get_plugin("poll_interval")) * 60 * 1000, 0, 0, "trigger_poll", "")
+    weechat.hook_fd(parent.fileno(), 1, 0, 0, "renderConversations", "")
