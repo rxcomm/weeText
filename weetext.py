@@ -104,11 +104,20 @@ class SMS:
                     msgitem['phone'] = phone
                     smses.append(msgitem)
             convos.append(Conversation(conversation['id'], phone, smses))
-        return convos
+        #return convos
+        child.send(cPickle.dumps(convos)+'#####')
 
 def renderConversations(unused, fd):
     try:
         data = parent.recv(4096)
+
+        while True:
+            more = parent.recv(4096)
+            data += more
+            if data[-5:] == '#####':
+                data = data[:-5]
+                break
+
     except OSError:
         # TODO: some error reporting?
         return
@@ -142,11 +151,13 @@ def renderConversations(unused, fd):
 
 def poll_worker(sms):
     conversations = sms.getsms()
-    child.write(cPickle.dumps(conversations))
+    child.send(cPickle.dumps(conversations))
 
 def trigger_poll(*args):
     sms = SMS()
-    thread = threading.Thread(target=poll_worker, args=(sms,)).start()
+    thread = threading.Thread(target=sms.getsms)
+    thread.start()
+    thread.join()
     weechat.prnt('', str(threading.enumerate()))
     return weechat.WEECHAT_RC_OK
 
