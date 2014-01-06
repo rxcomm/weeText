@@ -31,10 +31,18 @@ to additional phone numbers by typing the command:
 
 This will open a texting window to phone number 0123456789.
 
+Finally, weeText incorporates the possibility of symmetric encryption
+of text messages using OpenSSL. The code for this comes directly from
+the crypt.py script, and you are encouraged to take a look at that
+script for usage instructions. One small difference, the cryptkey.*
+files are stored in ```%h/cryptkey``` rather than in ```%h``` as is
+the case for the crypt.py script
+
 ### Todos:
 
-1. threaded ```recText()``` and ```login()```
-
-2. encrypted text messaging
+1. non-blocking ```recText()``` and ```login()```
+The login() at script load time takes about 20 seconds. But that only
+needs to be done once. Receive text polling takes just a couple of
+seconds, but it should be possible to eliminate that as well.
 
 Enjoy!
