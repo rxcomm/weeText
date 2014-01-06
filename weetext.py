@@ -64,9 +64,10 @@ class Conversation(object):
 class SMS:
 
     def sendText(self, msg, number, buf):
-        global voice
         try:
+            gvlock.acquire()
             voice.send_sms(number, msg)
+            gvlock.release()
             weechat.prnt(buf, '<message sent>')
         except:
             weechat.prnt(buf, '<message NOT sent!>')
@@ -76,7 +77,9 @@ class SMS:
         # inefficient parse of things which pegs a CPU core and takes ~50 CPU
         # seconds, while this takes no time at all.
         global voice
+        gvlock.acquire()
         data = voice.sms.datafunc()
+        gvlock.release()
         data = re.search(r'<html><\!\[CDATA\[([^\]]*)', data, re.DOTALL).groups()[0]
 
         divs = SoupStrainer(['div', 'input'])
@@ -203,6 +206,7 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
     else:
         voice.login(email=weechat.config_get_plugin('email'), passwd=passwd)
     weechat.prnt('', 'Login successful')
+    gvlock = threading.Lock()
 
     # register the hooks
     weechat.hook_timer(int(weechat.config_get_plugin("poll_interval")) * 60 * 1000, 0, 0, "trigger_poll", "")
