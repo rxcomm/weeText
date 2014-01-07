@@ -204,7 +204,6 @@ def buffer_close_cb(data, buf):
 
 def encrypt(message, buf):
   username=weechat.buffer_get_string(buf, 'name')
-  pre = ''
   if os.path.exists(weechat_dir + key_dir + "/cryptkey." + username):
     p = subprocess.Popen(["openssl", "enc", "-a", "-" + weechat.config_get_plugin("cipher"), "-pass" ,"file:" + weechat_dir + key_dir + "/cryptkey." + username], bufsize=4096, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
     p.stdin.write(message)
@@ -212,22 +211,6 @@ def encrypt(message, buf):
     encrypted = p.stdout.read()
     p.stdout.close()
     encrypted = encrypted.replace("\n","|")
-    if len(encrypted) > 160:
-      splitmsg=string.split(message," ")
-      cutpoint=len(splitmsg)/2
-      p = subprocess.Popen(["openssl", "enc", "-a", "-" + weechat.config_get_plugin("cipher"), "-pass" ,"file:" + weechat_dir + key_dir + "/cryptkey." + username], bufsize=4096, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-      p.stdin.write(string.join(splitmsg[:cutpoint]," ") + "\n")
-      p.stdin.close()
-      encrypted = p.stdout.read()
-      p.stdout.close()
-      encrypted = encrypted.replace("\n","|")
-      p = subprocess.Popen(["openssl", "enc", "-a", "-" + weechat.config_get_plugin("cipher"), "-pass" ,"file:" + weechat_dir + key_dir + "/cryptkey." + username], bufsize=4096, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-      p.stdin.write( string.join(splitmsg[cutpoint:]," ") )
-      p.stdin.close()
-      encrypted2 = p.stdout.read()
-      p.stdout.close()
-      encrypted2 = encrypted2.replace("\n","|")
-      encrypted = encrypted + "\n" + pre + ":" + encrypted2[10:]
     return encrypted[10:]
   else:
     return message
