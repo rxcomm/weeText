@@ -74,9 +74,8 @@ class SMS:
 
     def sendText(self, msg, number, buf):
         try:
-            gvlock.acquire()
-            voice.send_sms(number, msg)
-            gvlock.release()
+            with gvlock:
+                voice.send_sms(number, msg)
             weechat.prnt(buf, '<message sent>')
         except:
             weechat.prnt(buf, '<message NOT sent!>')
@@ -85,10 +84,8 @@ class SMS:
         # We could call voice.sms() directly, but I found this does a rather
         # inefficient parse of things which pegs a CPU core and takes ~50 CPU
         # seconds, while this takes no time at all.
-        global voice
-        gvlock.acquire()
-        data = voice.sms.datafunc()
-        gvlock.release()
+        with gvlock:
+            data = voice.sms.datafunc()
         data = re.search(r'<html><\!\[CDATA\[([^\]]*)', data, re.DOTALL).groups()[0]
 
         divs = SoupStrainer(['div', 'input'])
@@ -188,6 +185,8 @@ def textOut(data, buf, input_data):
         input_data = encrypt(input_data, buf)
     thread = threading.Thread(target=sms.sendText, args=(input_data, number, buf))
     thread.start()
+    if len(threading.enumerate()) >= 4: # start moving them out!
+        thread.join()
     return weechat.WEECHAT_RC_OK
 
 def gvOut(data, buf, input_data):
