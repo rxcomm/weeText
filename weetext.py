@@ -1,7 +1,7 @@
 # ===============================================================
 SCRIPT_NAME    = "weetext"
 SCRIPT_AUTHOR  = "David R. Andersen <k0rx@RXcomm.net>, Tycho Andersen <tycho@tycho.ws>"
-SCRIPT_VERSION = "0.0.2"
+SCRIPT_VERSION = "0.0.3"
 SCRIPT_LICENSE = "GPL3"
 SCRIPT_DESC    = "SMS Text Messaging script for Weechat using Google Voice"
 
@@ -19,9 +19,9 @@ text <10 digit phone number>
 
 This will pop open a new buffer.
 
-I've also added optional encryption using ssl. This is essentially a wholesale
-copy of the encrypt() and decrypt() methods from the weechat crypt.py script.
-Thanks to the authors for that!
+I've also added optional symmetric-key encryption using OpenSSL. This is
+essentially a wholesale copy of the encrypt() and decrypt() methods from
+the weechat crypt.py script. Thanks to the authors for that!
 
 Todo:
 1. ...
