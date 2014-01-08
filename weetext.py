@@ -9,14 +9,11 @@ SCRIPT_DESC    = "SMS Text Messaging plugin for Weechat using Google Voice"
 This script implements chatting via text message with Weechat.
 
 Email and password should be configured (either by editing the script
-itself or adding options to plugins.conf). For using secure passwords, 
+itself or adding options to plugins.conf). For using secure passwords,
 see the weechat /secure command.
 
-The script will block weechat briefly at startup when it is logging in to
-Google Voice. Also, at this time sendText is threaded, but recText is
-not.
-
-To initiate a text message session with someone new, type the command:
+To initiate a text message session with someone new, that isn't currently
+in your weeText buffer list, type the command:
 
 text <10 digit phone number>
 
@@ -27,7 +24,7 @@ copy of the encrypt() and decrypt() methods from the weechat crypt.py script.
 Thanks to the authors for that!
 
 Todo:
-1. non-blocking sms.getsms()
+1. ...
 
 """
 
