@@ -13,7 +13,7 @@ itself before loading or adding options to plugins.conf). For using
 secure passwords, see the weechat /secure command.
 
 To initiate a text message session with someone new, that isn't currently
-in your weeText buffer list, type the command:
+in your weeText buffer list, in the weeText buffer type the command:
 
 text <10 digit phone number>
 
