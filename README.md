@@ -6,13 +6,13 @@ Text messaging script for Weechat using Google Voice
 ### Usage:
 
 1) Edit the script or ```~/.weechat/plugins.conf``` and input
-your credentials.
+your credentials and deired poll interval.
 
 plugins.conf:
 
      python.weetext.email = "your_address@gmail.com"
      python.weetext.passwd = "${sec.data.weetext}"
-     python.weetext.poll_interval = "2"
+     python.weetext.poll_interval = "120"
 
 or, if you don't want to use the /secure password storage
 in weechat:
@@ -21,8 +21,8 @@ in weechat:
 
 Load the script and weechat should connect to Google Voice.
 Then after "polling_interval" seconds, you should see
-all of your available text message conversations - one
-buffer per phone number.
+your available text message conversations - one buffer per
+phone number contact.
 
 In the weetext window, you can open text message windows
 to additional phone numbers by typing the command:
@@ -40,9 +40,6 @@ the case for the crypt.py script
 
 ### Todos:
 
-1. non-blocking ```recText()``` and ```login()```
-The login() at script load time takes about 20 seconds. But that only
-needs to be done once. Receive text polling takes just a couple of
-seconds, but it should be possible to eliminate that as well.
+1. right now there aren't really any... ```;-)```
 
 Enjoy!
