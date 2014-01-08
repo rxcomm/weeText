@@ -3,14 +3,14 @@ SCRIPT_NAME    = "weetext"
 SCRIPT_AUTHOR  = "David R. Andersen <k0rx@RXcomm.net>, Tycho Andersen <tycho@tycho.ws>"
 SCRIPT_VERSION = "0.0.2"
 SCRIPT_LICENSE = "GPL3"
-SCRIPT_DESC    = "SMS Text Messaging plugin for Weechat using Google Voice"
+SCRIPT_DESC    = "SMS Text Messaging script for Weechat using Google Voice"
 
 """
 This script implements chatting via text message with Weechat.
 
 Email and password should be configured (either by editing the script
-itself or adding options to plugins.conf). For using secure passwords,
-see the weechat /secure command.
+itself before loading or adding options to plugins.conf). For using
+secure passwords, see the weechat /secure command.
 
 To initiate a text message session with someone new, that isn't currently
 in your weeText buffer list, type the command:
@@ -31,12 +31,12 @@ Todo:
 import weechat
 import sys
 import os
+import glob
 import re
 import cPickle
 import subprocess
 import random
 import string
-import threading
 from googlevoice import Voice
 from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
@@ -111,7 +111,12 @@ def renderConversations(unused, command, return_code, out, err):
                     buf = weechat.buffer_new('Me', "textOut", "", "buffer_close_cb", "")
             if weechat.config_get_plugin('encrypt_sms') == 'True':
                 msg['text'] = decrypt(msg['text'], buf)
-            weechat.prnt(buf, msg['from'] + ' ' + msg['text'])
+            nick = msg['from'][:-1].strip()
+            tags = 'notify_private,nick_' + msg['from'][:-1].strip()
+            tags += ',log1,prefix_nick_' + weechat.info_get('irc_nick_color_name', nick)
+            nick = msg['from'][:-1].strip()
+            weechat.prnt_date_tags(buf, 0, tags, '\x03' + weechat.info_get('irc_nick_color', nick)
+                                   + nick + '\t' + msg['text'])
     conv = ''
     weechat.hook_process(weechat_dir + '/python/wtrecv.py ' + email + ' ' + passwd + ' ' +
                          weechat.config_get_plugin('poll_interval'), 0,
@@ -161,7 +166,9 @@ def buffer_close_cb(data, buf):
 def encrypt(message, buf):
   username=weechat.buffer_get_string(buf, 'name')
   if os.path.exists(weechat_dir + key_dir + "/cryptkey." + username):
-    p = subprocess.Popen(["openssl", "enc", "-a", "-" + weechat.config_get_plugin("cipher"), "-pass" ,"file:" + weechat_dir + key_dir + "/cryptkey." + username], bufsize=4096, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+    p = subprocess.Popen(["openssl", "enc", "-a", "-" + weechat.config_get_plugin("cipher"),
+                          "-pass" ,"file:" + weechat_dir + key_dir + "/cryptkey." + username],
+                          bufsize=4096, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
     p.stdin.write(message)
     p.stdin.close()
     encrypted = p.stdout.read()
@@ -174,15 +181,18 @@ def encrypt(message, buf):
 def decrypt(message, buf):
   username=weechat.buffer_get_string(buf, 'name')
   if os.path.exists(weechat_dir + key_dir + "/cryptkey." + username):
-    p = subprocess.Popen(["openssl", "enc", "-d", "-a", "-" + weechat.config_get_plugin("cipher"), "-pass" ,"file:" + weechat_dir + key_dir + "/cryptkey." + username], bufsize=4096, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+    p = subprocess.Popen(["openssl", "enc", "-d", "-a", "-" + weechat.config_get_plugin("cipher"),
+                          "-pass" ,"file:" + weechat_dir + key_dir + "/cryptkey." + username],
+                          bufsize=4096, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
     p.stdin.write("U2FsdGVkX1" + message.replace("|","\n"))
     p.stdin.close()
     decrypted = p.stdout.read()
     p.stdout.close()
     if decrypted == "":
       return message
-    decrypted = ''.join(c for c in decrypted if ord(c) > 31 or ord(c) == 9 or ord(c) == 2 or ord(c) == 3 or ord(c) == 15)
-    return weechat.config_get_plugin("message_indicator") + decrypted
+    decrypted = ''.join(c for c in decrypted if ord(c) > 31 or ord(c) == 9 or ord(c) == 2
+                or ord(c) == 3 or ord(c) == 15)
+    return '\x19' + weechat.color('lightred') + weechat.config_get_plugin("message_indicator") + '\x1C' + decrypted
   else:
     return message
 
@@ -336,6 +346,10 @@ except:
 os.remove(user_path + '/.weechat/.gvlock.' + sys.argv[5])
 """)
     os.chmod(weechat_dir + '/python/wtsend.py', 0755)
+
+    # remove any old .gvlock.* files
+    for gvlockfile in glob.glob(weechat_dir + '/.gvlock.*'):
+        os.remove(gvlockfile)
 
     # register the hooks
     weechat.hook_signal("buffer_switch","update_encryption_status","")
