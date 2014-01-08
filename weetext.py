@@ -35,10 +35,11 @@ import weechat
 import sys
 import os
 import re
-import socket
-import threading
 import cPickle
 import subprocess
+import random
+import string
+import threading
 from googlevoice import Voice
 from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
@@ -46,7 +47,7 @@ from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 script_options = {
     "email" : "", # GV email address
     "passwd" : "", # GV password - can use /secure
-    "poll_interval" : "2", # poll interval for receiving messages (sec)
+    "poll_interval" : "120", # poll interval for receiving messages (sec)
     "encrypt_sms" : "True",
     "key_dir" : "/cryptkey",
     "cipher" : "aes-256-cbc",
@@ -55,7 +56,7 @@ script_options = {
 
 conversation_map = {}
 number_map = {}
-(parent, child) = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+conv = ''
 
 class Conversation(object):
     def __init__(self, conv_id, number, messages):
@@ -70,70 +71,26 @@ class Conversation(object):
     def __iter__(self):
         return iter(reversed(self.messages))
 
-class SMS:
-
-    def sendText(self, msg, number, buf):
-        try:
-            with gvlock:
-                voice.send_sms(number, msg)
-            weechat.prnt(buf, '<message sent>')
-        except:
-            weechat.prnt(buf, '<message NOT sent!>')
-
-    def getsms(self):
-        # We could call voice.sms() directly, but I found this does a rather
-        # inefficient parse of things which pegs a CPU core and takes ~50 CPU
-        # seconds, while this takes no time at all.
-        with gvlock:
-            data = voice.sms.datafunc()
-        data = re.search(r'<html><\!\[CDATA\[([^\]]*)', data, re.DOTALL).groups()[0]
-
-        divs = SoupStrainer(['div', 'input'])
-        tree = BeautifulSoup(data, parseOnlyThese=divs)
-
-        convos = []
-        conversations = tree.findAll("div", attrs={"id" : True},recursive=False)
-        for conversation in conversations:
-            inputs = SoupStrainer('input')
-            tree_inp = BeautifulSoup(str(conversation),parseOnlyThese=inputs)
-            phone = tree_inp.find('input', "gc-quickcall-ac")['value']
-
-            smses = []
-            msgs = conversation.findAll(attrs={"class" : "gc-message-sms-row"})
-            for row in msgs:
-                msgitem = {"id" : conversation["id"]}
-                spans = row.findAll("span", attrs={"class" : True}, recursive=False)
-                for span in spans:
-                    cl = span["class"].replace('gc-message-sms-', '')
-                    msgitem[cl] = (" ".join(span.findAll(text=True))).strip()
-                if msgitem["text"]:
-                    msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
-                                      convertEntities=BeautifulStoneSoup.HTML_ENTITIES
-                                      ).contents[0]
-                    msgitem['phone'] = phone
-                    smses.append(msgitem)
-            convos.append(Conversation(conversation['id'], phone, smses))
-        #return convos
-        child.send(cPickle.dumps(convos)+'#####')
-
-def renderConversations(unused, fd):
-    try:
-        data = parent.recv(4096)
-
-        while True:
-            more = parent.recv(4096)
-            data += more
-            if data[-5:] == '#####':
-                data = data[:-5]
-                break
-
-    except OSError:
-        # TODO: some error reporting?
-        return
-
-    conversations = reversed(cPickle.loads(data))
-
+def renderConversations(unused, command, return_code, out, err):
     global conversation_map
+    global conv
+
+    if return_code == weechat.WEECHAT_HOOK_PROCESS_ERROR:
+        weechat.prnt("", "Error with command '%s'" % command)
+        return weechat.WEECHAT_RC_OK
+    if return_code > 0:
+        weechat.prnt("", "return_code = %d" % return_code)
+    if out != '':
+        conv += out
+        if return_code == weechat.WEECHAT_HOOK_PROCESS_RUNNING:
+            weechat.prnt('', 'getting more data')
+            return weechat.WEECHAT_RC_OK
+    if err != "":
+        weechat.prnt("", "stderr: %s" % err)
+        return weechat.WEECHAT_RC_OK
+
+    conversations = reversed(cPickle.loads(conv))
+
     for conversation in conversations:
         if not conversation.conv_id in conversation_map:
             conversation_map[conversation.conv_id] = conversation
@@ -158,18 +115,10 @@ def renderConversations(unused, fd):
             if weechat.config_get_plugin('encrypt_sms') == 'True':
                 msg['text'] = decrypt(msg['text'], buf)
             weechat.prnt(buf, msg['from'] + ' ' + msg['text'])
-    return weechat.WEECHAT_RC_OK
-
-def poll_worker(sms):
-    conversations = sms.getsms()
-    child.send(cPickle.dumps(conversations))
-
-def trigger_poll(*args):
-    sms = SMS()
-    thread = threading.Thread(target=sms.getsms)
-    thread.start()
-    thread.join()
-    #weechat.prnt('', str(threading.enumerate()))
+    conv = ''
+    weechat.hook_process(weechat_dir + '/python/wtrecv.py ' + email + ' ' + passwd + ' ' +
+                         weechat.config_get_plugin('poll_interval'), 0,
+                         'renderConversations', '')
     return weechat.WEECHAT_RC_OK
 
 def textOut(data, buf, input_data):
@@ -177,16 +126,27 @@ def textOut(data, buf, input_data):
     number = None
     for num, dest in number_map.iteritems():
         if dest[:-1] == weechat.buffer_get_string(buf, 'name'):
-            number = num
+            number = num[2:]
     if not number:
         number = weechat.buffer_get_string(buf, 'name')[2:]
-    sms = SMS()
     if weechat.config_get_plugin('encrypt_sms') == 'True':
         input_data = encrypt(input_data, buf)
-    thread = threading.Thread(target=sms.sendText, args=(input_data, number, buf))
-    thread.start()
-    if len(threading.enumerate()) >= 4: # start moving them out!
-        thread.join()
+    msg_id = ''.join(random.choice(string.lowercase) for x in range(4))
+    weechat.hook_process(weechat_dir + '/python/wtsend.py ' + email + ' ' +
+                         passwd + ' ' + number + ' "' + input_data + '" ' +
+                         msg_id, 0, 'sentCB', weechat.buffer_get_string(buf, 'name'))
+    return weechat.WEECHAT_RC_OK
+
+def sentCB(buf_name, command, return_code, out, err):
+    if return_code == weechat.WEECHAT_HOOK_PROCESS_ERROR:
+        weechat.prnt("", "Error with command '%s'" % command)
+        return weechat.WEECHAT_RC_OK
+    if return_code >= 0:
+        weechat.prnt("", "return_code = %d" % return_code)
+    if out != "":
+        weechat.prnt(weechat.buffer_search('python', buf_name), out)
+    if err != "":
+        weechat.prnt("", "stderr: %s" % err)
     return weechat.WEECHAT_RC_OK
 
 def gvOut(data, buf, input_data):
@@ -256,19 +216,14 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
         if not weechat.config_is_set_plugin(option):
             weechat.config_set_plugin(option, default_value)
 
-    # create voice instance
-    weechat.prnt('', 'Logging in to Google Voice...')
-    voice = Voice()
+    # get email/passwd and pass to other script
+    email=weechat.config_get_plugin('email')
     passwd = weechat.config_get_plugin('passwd')
     if re.search('sec.*data', passwd):
-        voice.login(email=weechat.config_get_plugin('email'),
-                    passwd=weechat.string_eval_expression(passwd, {}, {}, {}))
-    else:
-        voice.login(email=weechat.config_get_plugin('email'), passwd=passwd)
-    weechat.prnt('', 'Login successful')
-    gvlock = threading.Lock()
+        passwd=weechat.string_eval_expression(passwd, {}, {}, {})
 
     # register the hooks
-    weechat.hook_timer(int(weechat.config_get_plugin("poll_interval")) * 60 * 1000, 0, 0, "trigger_poll", "")
-    weechat.hook_fd(parent.fileno(), 1, 0, 0, "renderConversations", "")
     weechat.hook_signal("buffer_switch","update_encryption_status","")
+    weechat.hook_process(weechat_dir + '/python/wtrecv.py ' + email + ' ' + passwd + ' ' +
+                         weechat.config_get_plugin('poll_interval'), 0,
+                         'renderConversations', '')
