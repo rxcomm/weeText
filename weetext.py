@@ -19,12 +19,17 @@ text <10 digit phone number>
 
 This will pop open a new buffer.
 
+Currently, you can't use any quote marks (double or single) in sending
+a message. This will be fixed in the future per Todo # 1.
+
 I've also added optional symmetric-key encryption using OpenSSL. This is
 essentially a wholesale copy of the encrypt() and decrypt() methods from
 the weechat crypt.py script. Thanks to the authors for that!
 
 Todo:
-1. ...
+1. Pass gv credentials and message via stdin, rather than command line.
+   This will require a modification to the weechat code before it can
+   be implemented.
 
 """
 
