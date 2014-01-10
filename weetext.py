@@ -31,6 +31,10 @@ Todo:
    This will require a modification to the weechat code before it can
    be implemented.
 
+Note: This version contains a fairly ugly hack, so that you can use
+quotes, exclamation marks, and backslashes in your text messages.
+Not intended for long-term use. The real solution lies in Todo # 1.
+
 """
 
 import weechat
@@ -138,6 +142,9 @@ def textOut(data, buf, input_data):
         number = weechat.buffer_get_string(buf, 'name')[2:]
     if weechat.config_get_plugin('encrypt_sms') == 'True':
         input_data = encrypt(input_data, buf)
+    input_data = input_data.replace('"', '__dq__')
+    input_data = input_data.replace("'", "__sq__")
+    input_data = input_data.replace("!", "__ex__")
     msg_id = ''.join(random.choice(string.lowercase) for x in range(4))
     weechat.hook_process(weechat_dir + '/python/wtsend.py ' + email + ' ' +
                          passwd + ' ' + number + ' "' + input_data + '" ' +
@@ -336,6 +343,9 @@ email = sys.argv[1]
 passwd = sys.argv[2]
 number = sys.argv[3]
 payload = sys.argv[4]
+payload = payload.replace('__dq__','"')
+payload = payload.replace("__sq__","'")
+payload = payload.replace("__ex__","!")
 msg_id = sys.argv[5]
 
 open(user_path + '/.weechat/.gvlock.' + msg_id, 'a').close()
