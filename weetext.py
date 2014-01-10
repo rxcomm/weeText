@@ -145,6 +145,7 @@ def textOut(data, buf, input_data):
     input_data = input_data.replace('"', '__dq__')
     input_data = input_data.replace("'", "__sq__")
     input_data = input_data.replace("!", "__ex__")
+    input_data = input_data.replace("\\\\", "__bs__")
     msg_id = ''.join(random.choice(string.lowercase) for x in range(4))
     weechat.hook_process(weechat_dir + '/python/wtsend.py ' + email + ' ' +
                          passwd + ' ' + number + ' "' + input_data + '" ' +
@@ -346,6 +347,7 @@ payload = sys.argv[4]
 payload = payload.replace('__dq__','"')
 payload = payload.replace("__sq__","'")
 payload = payload.replace("__ex__","!")
+payload = payload.replace("__bs__","\\\\")
 msg_id = sys.argv[5]
 
 open(user_path + '/.weechat/.gvlock.' + msg_id, 'a').close()
