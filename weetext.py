@@ -37,21 +37,12 @@ text <10 digit phone number>
 
 This will pop open a new buffer.
 
-Currently, you can't use any quote marks (double or single) in sending
-a message. This will be fixed in the future per Todo # 1.
-
 I've also added optional symmetric-key encryption using OpenSSL. This is
 essentially a wholesale copy of the encrypt() and decrypt() methods from
 the weechat crypt.py script. Thanks to the authors for that!
 
 Todo:
-1. Pass gv credentials and message via stdin, rather than command line.
-   This will require a modification to the weechat code before it can
-   be implemented.
-
-Note: This version contains a fairly ugly hack, so that you can use
-quotes, exclamation marks, and backslashes in your text messages.
-Not intended for long-term use. The real solution lies in Todo # 1.
+1. Add buffer for texting multiple parties at the same time.
 
 """
 
@@ -145,9 +136,11 @@ def renderConversations(unused, command, return_code, out, err):
             weechat.prnt_date_tags(buf, 0, tags, '\x03' + weechat.info_get('irc_nick_color', nick)
                                    + nick + '\t' + msg['text'])
     conv = ''
-    weechat.hook_process(weechat_dir + '/python/wtrecv.py ' + email + ' ' + passwd + ' ' +
-                         weechat.config_get_plugin('poll_interval'), 0,
-                         'renderConversations', '')
+    proc_data = email + '\n' + passwd + '\n' +\
+                weechat.config_get_plugin('poll_interval') + '\n'
+    recv_hook = weechat.hook_process_hashtable(weechat_dir + '/python/wtrecv.py',
+                { 'stdin': '' }, 0, 'renderConversations', '')
+    weechat.hook_set(recv_hook, 'stdin', proc_data)
     return weechat.WEECHAT_RC_OK
 
 def textOut(data, buf, input_data):
@@ -160,14 +153,12 @@ def textOut(data, buf, input_data):
         number = weechat.buffer_get_string(buf, 'name')[2:]
     if weechat.config_get_plugin('encrypt_sms') == 'True':
         input_data = encrypt(input_data, buf)
-    input_data = input_data.replace('"', '__dq__')
-    input_data = input_data.replace("'", "__sq__")
-    input_data = input_data.replace("!", "__ex__")
-    input_data = input_data.replace("\\\\", "__bs__")
     msg_id = ''.join(random.choice(string.lowercase) for x in range(4))
-    weechat.hook_process(weechat_dir + '/python/wtsend.py ' + email + ' ' +
-                         passwd + ' ' + number + ' "' + input_data + '" ' +
-                         msg_id, 0, 'sentCB', weechat.buffer_get_string(buf, 'name'))
+    send_hook = weechat.hook_process_hashtable(weechat_dir + '/python/wtsend.py',
+                { 'stdin': '' }, 0, 'sentCB', weechat.buffer_get_string(buf, 'name'))
+    proc_data = email + '\n' + passwd + '\n' + number + '\n' +\
+                input_data + '\n' + msg_id + '\n'
+    weechat.hook_set(send_hook, 'stdin', proc_data)
     return weechat.WEECHAT_RC_OK
 
 def sentCB(buf_name, command, return_code, out, err):
@@ -328,9 +319,9 @@ class SMS:
 
 if __name__ == '__main__':
 
-    email = sys.argv[1]
-    passwd = sys.argv[2]
-    poll_interval = sys.argv[3]
+    email = sys.stdin.readline()
+    passwd = sys.stdin.readline()
+    poll_interval = sys.stdin.readline()
 
     time.sleep(float(poll_interval))
 
@@ -357,17 +348,14 @@ import os
 from googlevoice import Voice
 from googlevoice.util import input
 
-user_path = os.path.expanduser('~')
-email = sys.argv[1]
-passwd = sys.argv[2]
-number = sys.argv[3]
-payload = sys.argv[4]
-payload = payload.replace('__dq__','"')
-payload = payload.replace("__sq__","'")
-payload = payload.replace("__ex__","!")
-payload = payload.replace("__bs__","\\\\")
-msg_id = sys.argv[5]
+# read the credentials, payload, and msg_id from stdin
+email = sys.stdin.readline()
+passwd = sys.stdin.readline()
+number = sys.stdin.readline()
+payload = sys.stdin.readline()
+msg_id = sys.stdin.readline()
 
+user_path = os.path.expanduser('~')
 open(user_path + '/.weechat/.gvlock.' + msg_id, 'a').close()
 
 try:
@@ -378,7 +366,7 @@ try:
 except:
     print '<message NOT sent!>'
 
-os.remove(user_path + '/.weechat/.gvlock.' + sys.argv[5])
+os.remove(user_path + '/.weechat/.gvlock.' + msg_id)
 """)
     os.chmod(weechat_dir + '/python/wtsend.py', 0755)
 
@@ -388,6 +376,8 @@ os.remove(user_path + '/.weechat/.gvlock.' + sys.argv[5])
 
     # register the hooks
     weechat.hook_signal("buffer_switch","update_encryption_status","")
-    weechat.hook_process(weechat_dir + '/python/wtrecv.py ' + email + ' ' + passwd + ' ' +
-                         weechat.config_get_plugin('poll_interval'), 0,
-                         'renderConversations', '')
+    proc_data = email + '\n' + passwd + '\n' +\
+                weechat.config_get_plugin('poll_interval') + '\n'
+    recv_hook = weechat.hook_process_hashtable(weechat_dir + '/python/wtrecv.py',
+                { 'stdin': '' }, 0, 'renderConversations', '')
+    weechat.hook_set(recv_hook, 'stdin', proc_data)
