@@ -19,7 +19,7 @@
 
 SCRIPT_NAME    = "weetext"
 SCRIPT_AUTHOR  = "David R. Andersen <k0rx@RXcomm.net>, Tycho Andersen <tycho@tycho.ws>"
-SCRIPT_VERSION = "0.0.3"
+SCRIPT_VERSION = "0.1.0"
 SCRIPT_LICENSE = "GPL3"
 SCRIPT_DESC    = "SMS Text Messaging script for Weechat using Google Voice"
 
@@ -251,10 +251,9 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
     if re.search('sec.*data', passwd):
         passwd=weechat.string_eval_expression(passwd, {}, {}, {})
 
-    # write the helper files if needed
-    if not os.path.isfile(weechat_dir + '/python/wtrecv.py'):
-        with open(weechat_dir + '/python/wtrecv.py', 'w') as f:
-            f.write("""#!/usr/bin/env python
+    # write the helper files
+    with open(weechat_dir + '/python/wtrecv.py', 'w') as f:
+        f.write("""#!/usr/bin/env python
 
 import sys
 import cPickle
@@ -339,9 +338,8 @@ if __name__ == '__main__':
 """)
     os.chmod(weechat_dir + '/python/wtrecv.py', 0755)
 
-    if not os.path.isfile(weechat_dir + '/python/wtsend.py'):
-        with open(weechat_dir + '/python/wtsend.py', 'w') as f:
-            f.write("""#!/usr/bin/env python
+    with open(weechat_dir + '/python/wtsend.py', 'w') as f:
+        f.write("""#!/usr/bin/env python
 
 import sys
 import os
