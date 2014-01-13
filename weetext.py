@@ -19,7 +19,7 @@
 
 SCRIPT_NAME    = "weetext"
 SCRIPT_AUTHOR  = "David R. Andersen <k0rx@RXcomm.net>, Tycho Andersen <tycho@tycho.ws>"
-SCRIPT_VERSION = "0.1.0"
+SCRIPT_VERSION = "0.1.1"
 SCRIPT_LICENSE = "GPL3"
 SCRIPT_DESC    = "SMS Text Messaging script for Weechat using Google Voice"
 
@@ -36,6 +36,13 @@ in your weeText buffer list, in the weeText buffer type the command:
 text <10 digit phone number>
 
 This will pop open a new buffer.
+
+You can also send text messages to multiple numbers. The syntax is (from
+the weeText buffer):
+
+multi <number1>,<number2>,...
+
+This will pop open a new multi-text buffer.
 
 I've also added optional symmetric-key encryption using OpenSSL. This is
 essentially a wholesale copy of the encrypt() and decrypt() methods from
@@ -161,6 +168,20 @@ def textOut(data, buf, input_data):
     weechat.hook_set(send_hook, 'stdin', proc_data)
     return weechat.WEECHAT_RC_OK
 
+def multiText(data, buf, input_data):
+    global number_map
+    numbers = data.split(',')
+    if weechat.config_get_plugin('encrypt_sms') == 'True':
+        input_data = encrypt(input_data, buf)
+    for number in numbers:
+        msg_id = ''.join(random.choice(string.lowercase) for x in range(4))
+        send_hook = weechat.hook_process_hashtable(weechat_dir + '/python/wtsend.py',
+                    { 'stdin': '' }, 0, 'sentCB', weechat.buffer_get_string(buf, 'name'))
+        proc_data = email + '\n' + passwd + '\n' + number + '\n' +\
+                    input_data + '\n' + msg_id + '\n'
+        weechat.hook_set(send_hook, 'stdin', proc_data)
+    return weechat.WEECHAT_RC_OK
+
 def sentCB(buf_name, command, return_code, out, err):
     if return_code == weechat.WEECHAT_HOOK_PROCESS_ERROR:
         weechat.prnt("", "Error with command '%s'" % command)
@@ -168,7 +189,8 @@ def sentCB(buf_name, command, return_code, out, err):
     if return_code > 0:
         weechat.prnt("", "return_code = %d" % return_code)
     if out != "":
-        weechat.prnt(weechat.buffer_search('python', buf_name), out)
+        tags = 'notify_message'
+        weechat.prnt_date_tags(weechat.buffer_search('python', buf_name), 0, tags, out)
     if err != "":
         weechat.prnt("", "stderr: %s" % err)
     return weechat.WEECHAT_RC_OK
@@ -176,6 +198,13 @@ def sentCB(buf_name, command, return_code, out, err):
 def gvOut(data, buf, input_data):
     if input_data[:4] == 'text' and buf == weechat.buffer_search('python', 'weeText'):
         buffer = weechat.buffer_new("+1"+input_data[5:], "textOut", "", "buffer_close_cb", "")
+    if input_data[:5] == 'multi' and buf == weechat.buffer_search('python', 'weeText'):
+        num_list = input_data[6:].split(',')
+        nums = ''
+        for num in num_list:
+            nums += '+' + num[-4:]
+        nums = nums[1:]
+        buffer = weechat.buffer_new('m:' + nums, "multiText", input_data[6:], "buffer_close_cb", "")
     return weechat.WEECHAT_RC_OK
 
 def buffer_input_cb(data, buf, input_data):
@@ -318,9 +347,9 @@ class SMS:
 
 if __name__ == '__main__':
 
-    email = sys.stdin.readline()
-    passwd = sys.stdin.readline()
-    poll_interval = sys.stdin.readline()
+    email = sys.stdin.readline().strip()
+    passwd = sys.stdin.readline().strip()
+    poll_interval = sys.stdin.readline().strip()
 
     time.sleep(float(poll_interval))
 
@@ -347,11 +376,11 @@ from googlevoice import Voice
 from googlevoice.util import input
 
 # read the credentials, payload, and msg_id from stdin
-email = sys.stdin.readline()
-passwd = sys.stdin.readline()
-number = sys.stdin.readline()
-payload = sys.stdin.readline()
-msg_id = sys.stdin.readline()
+email = sys.stdin.readline().strip()
+passwd = sys.stdin.readline().strip()
+number = sys.stdin.readline().strip()
+payload = sys.stdin.readline().strip()
+msg_id = sys.stdin.readline().strip()
 
 user_path = os.path.expanduser('~')
 open(user_path + '/.weechat/.gvlock.' + msg_id, 'a').close()
