@@ -35,7 +35,7 @@ This will open a texting window to phone number 0123456789.
 You can also text multiple numbers at the same time. The syntax
 for this is (in the weeText buffer):
 
-     text <number1>,<number2>,...
+     multi <number1>,<number2>,...
 
 Finally, weeText incorporates the possibility of symmetric encryption
 of text messages using OpenSSL. The code for this comes directly from
