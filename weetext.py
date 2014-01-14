@@ -419,4 +419,4 @@ os.remove(user_path + '/.weechat/.gvlock.' + msg_id)
     callGV()
 
     # make sure we are receiving data
-    weechat.hook_timer(60000, 0, 0, 'checkWTrecv', '')
+    weechat.hook_timer(600000, 0, 0, 'checkWTrecv', '')

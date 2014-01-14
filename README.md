@@ -6,7 +6,7 @@ Text messaging script for Weechat using Google Voice
 ### Usage:
 
 1) Edit the script or ```~/.weechat/plugins.conf``` and input
-your credentials and deired poll interval.
+your credentials and desired poll interval.
 
 plugins.conf:
 
@@ -25,11 +25,17 @@ your available text message conversations - one buffer per
 phone number contact.
 
 In the weetext window, you can open text message windows
-to additional phone numbers by typing the command:
+to additional phone numbers by typing the command (from the
+weeText buffer):
 
      text 0123456789
 
 This will open a texting window to phone number 0123456789.
+
+You can also text multiple numbers at the same time. The syntax
+for this is (in the weeText buffer):
+
+     text <number1>,<number2>,...
 
 Finally, weeText incorporates the possibility of symmetric encryption
 of text messages using OpenSSL. The code for this comes directly from
