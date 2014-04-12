@@ -48,6 +48,10 @@ I've also added optional symmetric-key encryption using OpenSSL. This is
 essentially a wholesale copy of the encrypt() and decrypt() methods from
 the weechat crypt.py script. Thanks to the authors for that!
 
+You need _at least_ the following modules in order for weeText to run:
+     beautifulsoup
+     pygooglevoice
+
 Todo:
 1. Add buffer for texting multiple parties at the same time.
 
