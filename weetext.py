@@ -299,7 +299,7 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
 
     # write the helper files
     with open(weechat_dir + '/python/wtrecv.py', 'w') as f:
-        f.write("""#!/usr/bin/env python
+        f.write("""#!/usr/bin/env python2
 
 import sys
 import cPickle
@@ -385,7 +385,7 @@ if __name__ == '__main__':
     os.chmod(weechat_dir + '/python/wtrecv.py', 0755)
 
     with open(weechat_dir + '/python/wtsend.py', 'w') as f:
-        f.write("""#!/usr/bin/env python
+        f.write("""#!/usr/bin/env python2
 
 import sys
 import os
