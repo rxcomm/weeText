@@ -406,7 +406,7 @@ try:
     voice = Voice()
     voice.login(email, passwd)
     voice.send_sms(number, payload)
-    print '<message sent>'
+    #print '<message sent>'
 except:
     print '<message NOT sent!>'
 
