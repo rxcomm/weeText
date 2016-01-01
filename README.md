@@ -44,6 +44,13 @@ script for usage instructions. One small difference, the cryptkey.*
 files are stored in ```%h/cryptkey``` rather than in ```%h``` as is
 the case for the crypt.py script
 
+### pygooglevoice Dependency
+
+In order for weetext to work, you need to install pygooglevoice.
+This can be problematic to find a version that works (Google changes
+thinks occasionally ;). I keep a working version at https://github.com/rxcomm/pygooglevoice
+This is the one I use.
+
 ### Todos:
 
 1. right now there aren't really any... ```;-)```
