@@ -67,7 +67,6 @@ import subprocess
 import random
 import string
 from googlevoice import Voice
-from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 
 script_options = {
@@ -308,7 +307,6 @@ import re
 import os
 import glob
 from googlevoice import Voice
-from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 
 user_path = os.path.expanduser('~')
@@ -390,7 +388,7 @@ if __name__ == '__main__':
 import sys
 import os
 from googlevoice import Voice
-from googlevoice.util import input
+from six.moves import input
 
 # read the credentials, payload, and msg_id from stdin
 email = sys.stdin.readline().strip()
