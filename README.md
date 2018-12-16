@@ -46,10 +46,13 @@ the case for the crypt.py script
 
 ### pygooglevoice Dependency
 
-In order for weetext to work, you need to install pygooglevoice.
-This can be problematic to find a version that works (Google changes
-thinks occasionally ;). I keep a working version at https://github.com/rxcomm/pygooglevoice
-This is the one I use.
+This module is synchronized to work with the latest ```googlevoice``` package
+which can be retrieved via:
+
+```bash
+pip install googlevoice
+```
+
 
 ### Todos:
 
