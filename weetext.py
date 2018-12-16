@@ -67,7 +67,6 @@ import subprocess
 import random
 import string
 from googlevoice import Voice
-from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 
 script_options = {
@@ -308,7 +307,6 @@ import re
 import os
 import glob
 from googlevoice import Voice
-from googlevoice.util import input
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 
 user_path = os.path.expanduser('~')
@@ -343,23 +341,25 @@ class SMS:
         for conversation in conversations:
             inputs = SoupStrainer('input')
             tree_inp = BeautifulSoup(str(conversation),parseOnlyThese=inputs)
-            phone = tree_inp.find('input', "gc-quickcall-ac")['value']
+            tree_query = tree_inp.find('input', "gc-quickcall-ac")
 
-            smses = []
-            msgs = conversation.findAll(attrs={"class" : "gc-message-sms-row"})
-            for row in msgs:
-                msgitem = {"id" : conversation["id"]}
-                spans = row.findAll("span", attrs={"class" : True}, recursive=False)
-                for span in spans:
-                    cl = span["class"].replace('gc-message-sms-', '')
-                    msgitem[cl] = (" ".join(span.findAll(text=True))).strip()
-                if msgitem["text"]:
-                    msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
-                                      convertEntities=BeautifulStoneSoup.HTML_ENTITIES
-                                      ).contents[0]
-                    msgitem['phone'] = phone
-                    smses.append(msgitem)
-            convos.append(Conversation(conversation['id'], phone, smses))
+            if tree_query:
+                phone = tree_query['value']
+                smses = []
+                msgs = conversation.findAll(attrs={"class" : "gc-message-sms-row"})
+                for row in msgs:
+                    msgitem = {"id" : conversation["id"]}
+                    spans = row.findAll("span", attrs={"class" : True}, recursive=False)
+                    for span in spans:
+                        cl = span["class"].replace('gc-message-sms-', '')
+                        msgitem[cl] = (" ".join(span.findAll(text=True))).strip()
+                    if msgitem["text"]:
+                        msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
+                                          convertEntities=BeautifulStoneSoup.HTML_ENTITIES
+                                          ).contents[0]
+                        msgitem['phone'] = phone
+                        smses.append(msgitem)
+                convos.append(Conversation(conversation['id'], phone, smses))
         print cPickle.dumps(convos)
 
 if __name__ == '__main__':
@@ -390,7 +390,7 @@ if __name__ == '__main__':
 import sys
 import os
 from googlevoice import Voice
-from googlevoice.util import input
+from six.moves import input
 
 # read the credentials, payload, and msg_id from stdin
 email = sys.stdin.readline().strip()
