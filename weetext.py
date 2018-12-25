@@ -66,6 +66,7 @@ import cPickle
 import subprocess
 import random
 import string
+
 from googlevoice import Voice
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 
@@ -77,6 +78,7 @@ script_options = {
     "key_dir" : "/cryptkey",
     "cipher" : "aes-256-cbc",
     "message_indicator" : "(enc) ",
+    "api_key" : "" # google voice api key. TODO find dynamically?
 }
 
 conversation_map = {}
@@ -108,7 +110,7 @@ def renderConversations(unused, command, return_code, out, err):
     if out != '':
         conv += out
         if return_code == weechat.WEECHAT_HOOK_PROCESS_RUNNING:
-            weechat.prnt('', 'getting more data')
+           #weechat.prnt('', 'getting more data')
             return weechat.WEECHAT_RC_OK
     if err != "":
         weechat.prnt("", "stderr: %s" % err)
@@ -147,6 +149,17 @@ def renderConversations(unused, command, return_code, out, err):
             tags = 'notify_private,nick_' + msg['from'][:-1].strip()
             tags += ',log1,prefix_nick_' + weechat.info_get('irc_nick_color_name', nick)
             nick = msg['from'][:-1].strip()
+
+            if "Group Message" in conversation.number and nick != "Me":
+                try:
+                    unknown_num, msg_txt = msg['text'].split("-", 1)
+                except ValueError:
+                    pass
+                else:
+                    real_name = number_map.get(unknown_num.strip())
+                    if real_name:
+                        msg['text'] = "{} {}".format(real_name, msg_txt)
+
             weechat.prnt_date_tags(buf, 0, tags, '\x03' + weechat.info_get('irc_nick_color', nick)
                                    + nick + '\t' + msg['text'])
     conv = ''
@@ -158,7 +171,10 @@ def textOut(data, buf, input_data):
     number = None
     for num, dest in number_map.iteritems():
         if dest[:-1] == weechat.buffer_get_string(buf, 'name'):
-            number = num[2:]
+            if "Group Message" not in num:
+                number = num[2:]
+            else:
+                number = num
     if not number:
         number = weechat.buffer_get_string(buf, 'name')[2:]
     if weechat.config_get_plugin('encrypt_sms') == 'True':
@@ -269,7 +285,7 @@ def callGV(buf=None, number=None, input_data=None, msg_id=None, send=False):
         send_hook = weechat.hook_process_hashtable(weechat_dir + '/python/wtsend.py',
                     { 'stdin': '' }, 0, 'sentCB', weechat.buffer_get_string(buf, 'name'))
         proc_data = email + '\n' + passwd + '\n' + number + '\n' +\
-                    input_data + '\n' + msg_id + '\n'
+                    input_data + '\n' + msg_id + '\n' + api_key + '\n'
         weechat.hook_set(send_hook, 'stdin', proc_data)
     else:
         proc_data = email + '\n' + passwd + '\n' +\
@@ -293,6 +309,7 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
     # get email/passwd and pass to other script
     email=weechat.config_get_plugin('email')
     passwd = weechat.config_get_plugin('passwd')
+    api_key = weechat.config_get_plugin('api_key')
     if re.search('sec.*data', passwd):
         passwd=weechat.string_eval_expression(passwd, {}, {}, {})
 
@@ -387,10 +404,14 @@ if __name__ == '__main__':
     with open(weechat_dir + '/python/wtsend.py', 'w') as f:
         f.write("""#!/usr/bin/env python2
 
-import sys
+import datetime
+import json
 import os
-from googlevoice import Voice
+import sys
+from hashlib import sha1
 from six.moves import input
+
+from googlevoice import Voice
 
 # read the credentials, payload, and msg_id from stdin
 email = sys.stdin.readline().strip()
@@ -398,17 +419,128 @@ passwd = sys.stdin.readline().strip()
 number = sys.stdin.readline().strip()
 payload = sys.stdin.readline().strip()
 msg_id = sys.stdin.readline().strip()
+api_key = sys.stdin.readline().strip()
 
 user_path = os.path.expanduser('~')
 open(user_path + '/.weechat/.gvlock.' + msg_id, 'a').close()
 
+
+def send_sms(session, number, payload):
+    # This is a bare absolute minimal attempt at reverse engineering
+    # a small portion of the new google voice API so that one could effectively
+    # respond to sms messages with this plugin
+
+    # This is bad, but it gets the job done. This google voice module
+    # currently does not support group text messages and even some
+    # normal messages. This at least enables this plugin to use the
+    # modern google voice API for sending SMS. Receiving is a major TODO still
+    # and relies on the current existing implementation in ```getsms```
+
+    # In order to extract the headers, I messed around with the HTTP archive coming
+    # out of firefox and made various combinations of headers until I got this working
+
+    # The body hack is just luck.
+    # * Index 4: The message body
+    # * Index 5: The number identifier
+    # * Index 6: Used for new numbers (does not have group or text prefix)
+
+    # The last index of the body is magic to me, I have no idea what it is. I could
+    # not send out group sms until I wiped out that element. It was a random guess that
+    # just happened to work. Without wiping it out, a successful response is still
+    # returned but the message does not send
+
+    # An update needs to be made to the google voice package to wrap
+    # around the new api
+
+    def build_headers(session):
+        origin = "https://voice.google.com"
+        date_utc = datetime.datetime.utcnow().strftime("%s")
+        sapisid = session.cookies.get_dict()["SAPISID"]
+
+        sapi_sid_hash = sha1(
+            "{} {} {}".format(date_utc, sapisid, origin)
+        ).hexdigest()
+
+        headers = {
+            'Authorization': 'SAPISIDHASH {}_{}'.format(date_utc, sapi_sid_hash),
+            'Content-Type': 'application/json+protobuf',
+            'X-JavaScript-User-Agent': 'google-api-javascript-client/1.1.0',
+            'X-Origin': origin,
+            'X-Referer': origin,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+        return headers
+
+    def build_sms_url():
+        url_tpl = "{url_base}/{endpoint}?{query_args}"
+
+        url_base  = "https://clients6.google.com/voice/v1/voiceclient/api2thread"
+
+        endpoint = "sendsms"
+
+
+        query_args = "protojson&key={}".format(api_key)
+
+        url = url_tpl.format(url_base=url_base,
+                             endpoint=endpoint,
+                             query_args=query_args)
+
+        return url
+
+    def build_request_body(payload, number, new_number=False):
+        body = [
+            None,
+            None,
+            None,
+            None,
+            '', # Message goes here
+            '', # number identifier goes here (group message or single number)
+            [], # new comma delimited numbers go here
+            None,
+            []
+        ]
+
+        body[4] = payload
+        msg_type = "t" if "Group Message" not in number else "g"
+
+        if msg_type == "t":
+            # this weechat plugin strips this from the number
+            # and this module itself has no reference to the buffer list
+            number = "+1" + number
+
+        if not new_number:
+            body[5] = "{}.{}".format(msg_type, number)
+        else:
+            # new messages go into the 6th index and are comma separated numbers
+            # This only supports one message at the time and this plugin
+            # iterates over the numbers anyway
+            body[6].append(new_number)
+        return body
+
+
+    headers = build_headers(session)
+    url = build_sms_url()
+    body = build_request_body(payload, number)
+
+    res = session.post(url, headers=headers, json=body)
+    if not res.ok:
+        # might be a new phone number
+        body = build_request_body(payload, number, new_number=True)
+        res = session.post(url, headers=headers, json=body)
+        if not res.ok:
+            raise Exception(res.text)
+
+voice = Voice()
 try:
-    voice = Voice()
     voice.login(email, passwd)
-    voice.send_sms(number, payload)
-    #print '<message sent>'
-except:
-    print '<message NOT sent!>'
+    if api_key:
+        send_sms(voice.session, number, payload)
+    else:
+        voice.send_sms(number, payload)
+except Exception as exc:
+    print '<message NOT sent!>: {}'.format(exc)
+else:
+    print '<message sent>'
 
 os.remove(user_path + '/.weechat/.gvlock.' + msg_id)
 """)
