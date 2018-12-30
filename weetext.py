@@ -514,7 +514,7 @@ def send_sms(session, number, payload):
             # new messages go into the 6th index and are comma separated numbers
             # This only supports one message at the time and this plugin
             # iterates over the numbers anyway
-            body[6].append(new_number)
+            body[6].append(number)
         return body
 
 
