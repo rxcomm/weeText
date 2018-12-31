@@ -405,7 +405,6 @@ if __name__ == '__main__':
         f.write("""#!/usr/bin/env python2
 
 import datetime
-import json
 import os
 import sys
 from hashlib import sha1
@@ -530,8 +529,8 @@ def send_sms(session, number, payload):
         if not res.ok:
             raise Exception(res.text)
 
-voice = Voice()
 try:
+    voice = Voice()
     voice.login(email, passwd)
     if api_key:
         send_sms(voice.session, number, payload)
