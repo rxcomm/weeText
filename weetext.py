@@ -373,7 +373,7 @@ class SMS:
                     if msgitem["text"]:
                         msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
                                           convertEntities=BeautifulStoneSoup.HTML_ENTITIES
-                                          ).contents[0]
+                                          ).contents[0].encode("ascii", "replace")
                         msgitem['phone'] = phone
                         smses.append(msgitem)
                 convos.append(Conversation(conversation['id'], phone, smses))
@@ -436,12 +436,14 @@ def send_sms(session, number, payload):
     # and relies on the current existing implementation in ```getsms```
 
     # In order to extract the headers, I messed around with the HTTP archive coming
-    # out of firefox and made various combinations of headers until I got this working
+    # out of firefox
 
-    # The body hack is just luck.
+    # The body expected:
     # * Index 4: The message body
     # * Index 5: The number identifier
     # * Index 6: Used for new numbers (does not have group or text prefix)
+
+    # Do not know what the other indices correspond to
 
     # The last index of the body is magic to me, I have no idea what it is. I could
     # not send out group sms until I wiped out that element. It was a random guess that
