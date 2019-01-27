@@ -1,3 +1,4 @@
+
 # ===============================================================
 
 # Copyright (C) 2014 by David R. Andersen and Tycho Andersen
@@ -67,8 +68,9 @@ import subprocess
 import random
 import string
 
+from collections import OrderedDict
+
 from googlevoice import Voice
-from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 
 script_options = {
     "email" : "", # GV email address
@@ -86,14 +88,20 @@ number_map = {}
 conv = ''
 
 class Conversation(object):
-    def __init__(self, conv_id, number, messages):
-        self.conv_id = conv_id
+    def __init__(self, number, messages):
         self.number = number
-        self.messages = messages
+        self.__messages = OrderedDict([(msg["msg_id"], msg) for msg in messages])
+
+    @property
+    def messages(self):
+        return self.__messages.values()
+
+    def __len__(self):
+        return len(self.messages)
 
     def new_messages(self, other):
-        assert len(self.messages) <= len(other.messages)
-        return other.messages[len(self.messages):]
+        new_msg_ids = set(other.__messages.keys()) - set(self.__messages.keys())
+        return [other.__messages[k] for  k in new_msg_ids]
 
     def __iter__(self):
         return iter(reversed(self.messages))
@@ -110,34 +118,39 @@ def renderConversations(unused, command, return_code, out, err):
     if out != '':
         conv += out
         if return_code == weechat.WEECHAT_HOOK_PROCESS_RUNNING:
-           #weechat.prnt('', 'getting more data')
             return weechat.WEECHAT_RC_OK
     if err != "":
         weechat.prnt("", "stderr: %s" % err)
         return weechat.WEECHAT_RC_OK
 
     try:
-        conversations = reversed(cPickle.loads(conv))
+        conversations = [
+            Conversation(*args) for args in reversed(cPickle.loads(conv))
+        ]
     except EOFError:
         weechat.prnt('', 'wtrecv returned garbage')
         return weechat.WEECHAT_RC_OK
 
     for conversation in conversations:
-        if not conversation.conv_id in conversation_map:
-            conversation_map[conversation.conv_id] = conversation
+        if conversation.number not in conversation_map:
+            conversation_map[conversation.number] = conversation
             msgs = conversation.messages
         else:
-            old = conversation_map[conversation.conv_id]
-            conversation_map[conversation.conv_id] = conversation
+            old = conversation_map[conversation.number]
+            conversation_map[conversation.number] = conversation
             msgs = old.new_messages(conversation)
         for msg in msgs:
-            if not conversation.number in number_map and msg['from'] != 'Me:':
-                number_map[conversation.number] = msg['from']
+            if conversation.number not in number_map and msg['from'] != 'Me':
+                if conversation.number.startswith("Group Message"):
+                    number_map[conversation.number] = conversation.number
+                else:
+                    number_map[conversation.number] = msg['from']
+
         for msg in msgs:
             if conversation.number in number_map:
-                buf = weechat.buffer_search('python', number_map[conversation.number][:-1])
+                buf = weechat.buffer_search('python', number_map[conversation.number])
                 if not buf:
-                    buf = weechat.buffer_new(number_map[conversation.number][:-1],
+                    buf = weechat.buffer_new(number_map[conversation.number],
                                              "textOut", "", "buffer_close_cb", "")
             else:
                 buf = weechat.buffer_search('python', 'Me')
@@ -145,20 +158,11 @@ def renderConversations(unused, command, return_code, out, err):
                     buf = weechat.buffer_new('Me', "textOut", "", "buffer_close_cb", "")
             if weechat.config_get_plugin('encrypt_sms') == 'True':
                 msg['text'] = decrypt(msg['text'], buf)
-            nick = msg['from'][:-1].strip()
-            tags = 'notify_private,nick_' + msg['from'][:-1].strip()
-            tags += ',log1,prefix_nick_' + weechat.info_get('irc_nick_color_name', nick)
-            nick = msg['from'][:-1].strip()
-
-            if "Group Message" in conversation.number and nick != "Me":
-                try:
-                    unknown_num, msg_txt = msg['text'].split("-", 1)
-                except ValueError:
-                    pass
-                else:
-                    real_name = number_map.get(unknown_num.strip())
-                    if real_name:
-                        msg['text'] = "{} {}".format(real_name, msg_txt)
+            nick = msg['from'].strip()
+            tags = ('notify_private,nick_' +
+                    nick +
+                    ',log1,prefix_nick_' +
+                    weechat.info_get('irc_nick_color_name', nick))
 
             weechat.prnt_date_tags(buf, 0, tags, '\x03' + weechat.info_get('irc_nick_color', nick)
                                    + nick + '\t' + msg['text'])
@@ -170,8 +174,8 @@ def textOut(data, buf, input_data):
     global number_map
     number = None
     for num, dest in number_map.iteritems():
-        if dest[:-1] == weechat.buffer_get_string(buf, 'name'):
-            if "Group Message" not in num:
+        if dest == weechat.buffer_get_string(buf, 'name'):
+            if not num.startswith("Group Message"):
                 number = num[2:]
             else:
                 number = num
@@ -284,12 +288,31 @@ def callGV(buf=None, number=None, input_data=None, msg_id=None, send=False):
     if send:
         send_hook = weechat.hook_process_hashtable(weechat_dir + '/python/wtsend.py',
                     { 'stdin': '' }, 0, 'sentCB', weechat.buffer_get_string(buf, 'name'))
-        proc_data = email + '\n' + passwd + '\n' + number + '\n' +\
-                    input_data + '\n' + msg_id + '\n' + api_key + '\n'
+        proc_data_fmt_str = (
+            "{email}{sep}{passwd}{sep}{number}{sep}"
+            "{input_data}{sep}{msg_id}{sep}{api_key}{sep}"
+        )
+
+        proc_data = proc_data_fmt_str.format(
+            email=email,
+            passwd=passwd,
+            number=number,
+            input_data=input_data,
+            msg_id=msg_id,
+            api_key=api_key,
+            sep="\n")
         weechat.hook_set(send_hook, 'stdin', proc_data)
     else:
-        proc_data = email + '\n' + passwd + '\n' +\
-                    weechat.config_get_plugin('poll_interval') + '\n'
+        proc_data_fmt_str = (
+            "{email}{sep}{passwd}{sep}{api_key}{sep}{poll_interval}{sep}"
+        )
+        proc_data = proc_data_fmt_str.format(
+            email=email,
+            passwd=passwd,
+            api_key=api_key,
+            poll_interval=weechat.config_get_plugin('poll_interval'),
+            sep="\n")
+
         recv_hook = weechat.hook_process_hashtable(weechat_dir + '/python/wtrecv.py',
                 { 'stdin': '' }, 0, 'renderConversations', '')
         weechat.hook_set(recv_hook, 'stdin', proc_data)
@@ -319,70 +342,136 @@ if weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, 
 
 import sys
 import cPickle
+import datetime
 import time
 import re
 import os
 import glob
+from hashlib import sha1
+
 from googlevoice import Voice
-from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup, SoupStrainer
 
 user_path = os.path.expanduser('~')
 
-class Conversation(object):
-    def __init__(self, conv_id, number, messages):
-        self.conv_id = conv_id
-        self.number = number
-        self.messages = messages
+def get_sms():
 
-    def new_messages(self, other):
-        assert len(self.messages) <= len(other.messages)
-        return other.messages[len(self.messages):]
+    # TODO document  API response body in heavy detail
+    # The body is not pretty and the indices of the important
+    # parts need to be stored as constants and documented
 
-    def __iter__(self):
-        return iter(reversed(self.messages))
+    def build_headers(session):
+        origin = "https://voice.google.com"
+        date_utc = datetime.datetime.utcnow().strftime("%s")
+        sapisid = session.cookies.get_dict()["SAPISID"]
 
-class SMS:
+        sapi_sid_hash = sha1(
+            "{} {} {}".format(date_utc, sapisid, origin)
+        ).hexdigest()
 
-    def getsms(self):
-        # We could call voice.sms() directly, but I found this does a rather
-        # inefficient parse of things which pegs a CPU core and takes ~50 CPU
-        # seconds, while this takes no time at all.
-        data = voice.sms.datafunc()
-        data = re.search(r'<html><\!\[CDATA\[([^\]]*)', data, re.DOTALL).groups()[0]
+        headers = {
+            'Authorization': 'SAPISIDHASH {}_{}'.format(date_utc, sapi_sid_hash),
+            'Content-Type': 'application/json+protobuf',
+            'X-JavaScript-User-Agent': 'google-api-javascript-client/1.1.0',
+            'X-Origin': origin,
+            'X-Referer': origin,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+        return headers
 
-        divs = SoupStrainer(['div', 'input'])
-        tree = BeautifulSoup(data, parseOnlyThese=divs)
+    def build_req_body():
+        # TODO this could be more customizeable
+        # 10 and 25 are arbitrary numbers chosen here
+        # The response comes back
+        return [
+            2, # gets messages (1) voicemail  (2) messages (3) unknown
+            10, # number of threads
+            25, # number of messages per thread to retrieve
+            None, # unknown
+            None, # unknown
+            [None, None, None] # unknown
+        ]
 
-        convos = []
-        conversations = tree.findAll("div", attrs={"id" : True},recursive=False)
-        for conversation in conversations:
-            inputs = SoupStrainer('input')
-            tree_inp = BeautifulSoup(str(conversation),parseOnlyThese=inputs)
-            tree_query = tree_inp.find('input', "gc-quickcall-ac")
+    def build_sms_url():
+        url_tpl = "{url_base}/{endpoint}?{query_args}"
 
-            if tree_query:
-                phone = tree_query['value']
-                smses = []
-                msgs = conversation.findAll(attrs={"class" : "gc-message-sms-row"})
-                for row in msgs:
-                    msgitem = {"id" : conversation["id"]}
-                    spans = row.findAll("span", attrs={"class" : True}, recursive=False)
-                    for span in spans:
-                        cl = span["class"].replace('gc-message-sms-', '')
-                        msgitem[cl] = (" ".join(span.findAll(text=True))).strip()
-                    if msgitem["text"]:
-                        msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
-                                          convertEntities=BeautifulStoneSoup.HTML_ENTITIES
-                                          ).contents[0].encode("ascii", "replace")
-                        msgitem['phone'] = phone
-                        smses.append(msgitem)
-                convos.append(Conversation(conversation['id'], phone, smses))
-        print cPickle.dumps(convos)
+        if not api_key:
+            raise ValueError("API key required")
+
+        query_args = "protojson&key={}".format(api_key)
+
+        url_base  = "https://clients6.google.com/voice/v1/voiceclient/api2thread"
+        endpoint = "list"
+
+        url = url_tpl.format(url_base=url_base,
+                             endpoint=endpoint,
+                             query_args=query_args)
+
+        return url
+
+    url = build_sms_url()
+
+    headers = build_headers(voice.session)
+
+    body = build_req_body()
+
+    res = voice.session.post(url, headers=headers, json=body)
+
+    if not res.ok:
+        raise Exception(res.text)
+
+    convos = []
+    conversations = res.json()[0]
+
+    msg_types = {"text": "t", "group_text": "g"}
+    for conversation in conversations:
+        smses = []
+        msg_type, phone = conversation[0].split(".", 1) # <identifier>.<phone>
+        msgs = conversation[2]
+
+        name_number_map = {}
+        if msg_type == msg_types["group_text"]:
+            participants = msgs[0][14][3]
+
+            for row in participants:
+                human_name = row[0]
+                number = row[1]
+                name_number_map[number] = human_name
+
+        for msg in reversed(msgs):
+            msg_txt = msg[9].encode("ascii", "ignore") #TODO
+            num = ""
+            _from = ""
+            try:
+                num, _ = msg_txt.split(" - ", 1)
+            except ValueError:
+                pass
+            finally:
+                num = num.strip()
+                _from = name_number_map.get(num)
+
+                if not _from:
+                    if  msg[-1] == 0: # not sent by me
+                        _from = msg[3][0]
+                    else:
+                        _from = "Me"
+
+            msg_id = msg[0]
+
+            msg_item = {
+                "text": msg_txt,
+                "from": _from,
+                "msg_id": msg_id,
+                "phone": phone
+            }
+            smses.append(msg_item)
+        convos.append((phone, smses))
+    print cPickle.dumps(convos)
 
 if __name__ == '__main__':
 
     email = sys.stdin.readline().strip()
     passwd = sys.stdin.readline().strip()
+    api_key = sys.stdin.readline().strip()
     poll_interval = sys.stdin.readline().strip()
 
     time.sleep(float(poll_interval))
@@ -393,8 +482,7 @@ if __name__ == '__main__':
         if f == []:
             voice = Voice()
             voice.login(email=email, passwd=passwd)
-            sms = SMS()
-            sms.getsms()
+            get_sms()
             break
         else:
             time.sleep(1)
@@ -423,35 +511,7 @@ api_key = sys.stdin.readline().strip()
 user_path = os.path.expanduser('~')
 open(user_path + '/.weechat/.gvlock.' + msg_id, 'a').close()
 
-
 def send_sms(session, number, payload):
-    # This is a bare absolute minimal attempt at reverse engineering
-    # a small portion of the new google voice API so that one could effectively
-    # respond to sms messages with this plugin
-
-    # This is bad, but it gets the job done. This google voice module
-    # currently does not support group text messages and even some
-    # normal messages. This at least enables this plugin to use the
-    # modern google voice API for sending SMS. Receiving is a major TODO still
-    # and relies on the current existing implementation in ```getsms```
-
-    # In order to extract the headers, I messed around with the HTTP archive coming
-    # out of firefox
-
-    # The body expected:
-    # * Index 4: The message body
-    # * Index 5: The number identifier
-    # * Index 6: Used for new numbers (does not have group or text prefix)
-
-    # Do not know what the other indices correspond to
-
-    # The last index of the body is magic to me, I have no idea what it is. I could
-    # not send out group sms until I wiped out that element. It was a random guess that
-    # just happened to work. Without wiping it out, a successful response is still
-    # returned but the message does not send
-
-    # An update needs to be made to the google voice package to wrap
-    # around the new api
 
     def build_headers(session):
         origin = "https://voice.google.com"
@@ -479,6 +539,8 @@ def send_sms(session, number, payload):
 
         endpoint = "sendsms"
 
+        if not api_key:
+            raise ValueError("API key required")
 
         query_args = "protojson&key={}".format(api_key)
 
@@ -529,15 +591,12 @@ def send_sms(session, number, payload):
         body = build_request_body(payload, number, new_number=True)
         res = session.post(url, headers=headers, json=body)
         if not res.ok:
-            raise Exception(res.text)
+            raise ValueError(res.text)
 
 try:
     voice = Voice()
     voice.login(email, passwd)
-    if api_key:
-        send_sms(voice.session, number, payload)
-    else:
-        voice.send_sms(number, payload)
+    send_sms(voice.session, number, payload)
 except Exception as exc:
     print '<message NOT sent!>: {}'.format(exc)
 else:
