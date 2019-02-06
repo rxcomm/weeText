@@ -101,7 +101,7 @@ class Conversation(object):
 
     def new_messages(self, other):
         new_msg_ids = set(other.__messages.keys()) - set(self.__messages.keys())
-        return [other.__messages[k] for  k in new_msg_ids]
+        return [other.__messages[k] for k in other.__messages if k in new_msg_ids]
 
     def __iter__(self):
         return iter(reversed(self.messages))
