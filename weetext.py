@@ -487,7 +487,7 @@ if __name__ == '__main__':
         else:
             time.sleep(1)
 """)
-    os.chmod(weechat_dir + '/python/wtrecv.py', 0755)
+    os.chmod(weechat_dir + '/python/wtrecv.py', 0o755)
 
     with open(weechat_dir + '/python/wtsend.py', 'w') as f:
         f.write("""#!/usr/bin/env python2
@@ -604,7 +604,7 @@ else:
 
 os.remove(user_path + '/.weechat/.gvlock.' + msg_id)
 """)
-    os.chmod(weechat_dir + '/python/wtsend.py', 0755)
+    os.chmod(weechat_dir + '/python/wtsend.py', 0o755)
 
     # remove any old .gvlock.* files
     for gvlockfile in glob.glob(weechat_dir + '/.gvlock.*'):
